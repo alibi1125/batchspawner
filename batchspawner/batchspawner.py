@@ -522,6 +522,8 @@ class BatchSpawnerBase(Spawner):
                 os.setuid(uid)
                 os.setgid(gid)
             return set_ids
+        
+        self.log.debug("Shared home location is set to %s" % self.shared_home_base_dir)
 
         rel_hub_path = '.jupyterhub'
         rel_cert_path = 'jupyterhub_certs'
@@ -543,6 +545,7 @@ class BatchSpawnerBase(Spawner):
         shutil.move(key, tmp_cert_path)
         shutil.move(cert, tmp_cert_path)
         shutil.copy(ca, tmp_cert_path)
+        self.log.debug("Moved SSL data to %s" % tmp_cert_path)
         key = os.path.join(tmp_cert_path, os.path.basename(paths['keyfile']))
         cert = os.path.join(tmp_cert_path, os.path.basename(paths['certfile']))
         ca = os.path.join(tmp_cert_path, os.path.basename(paths['cafile']))
@@ -550,11 +553,13 @@ class BatchSpawnerBase(Spawner):
         # squashing.
         for f in [key, cert, ca, tmp_cert_path]:
             shutil.chown(f, user=uid, group=gid)
+        self.log.debug("Successfully ran chown on cert files")
 
         subprocess.Popen(['rm', '-r', user_cert_path], preexec_fn=demote(uid, gid))
         subprocess.Popen(['mkdir', f"{shared_home}/{rel_hub_path}"], preexec_fn=demote(uid, gid))
         # Move certs to users dir
         subprocess.Popen(['mv', tmp_cert_path, user_cert_path], preexec_fn=demote(uid, gid))
+        self.log.debug("Moved SSL data to user`s home directory")
 
         key = os.path.join(user_cert_path, os.path.basename(paths['keyfile']))
         cert = os.path.join(user_cert_path, os.path.basename(paths['certfile']))
