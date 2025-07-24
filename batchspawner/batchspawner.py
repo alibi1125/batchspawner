@@ -19,6 +19,7 @@ import asyncio
 import os
 import pwd
 import re
+import shutil
 import xml.etree.ElementTree as ET
 from enum import Enum
 
@@ -499,6 +500,67 @@ class BatchSpawnerBase(Spawner):
             else:
                 yield {"message": "Unknown status..."}
             await asyncio.sleep(1)
+    
+    async def move_certs(self, paths):
+        """Takes cert paths, moves and sets ownership for them
+
+        Arguments:
+            paths (dict): a list of paths for key, cert, and CA
+
+        Returns:
+            dict: a list (potentially altered) of paths for key, cert,
+            and CA
+
+        Stage certificates into a private home directory
+        and make them readable by the user.
+        """
+        import pwd
+        import subprocess
+
+        def demote(uid, gid):
+            def set_ids():
+                os.setuid(uid)
+                os.setgid(gid)
+            return set_ids
+
+        rel_hub_path = '.jupyterhub'
+        rel_cert_path = 'jupyterhub_certs'
+
+        key = paths['keyfile']
+        cert = paths['certfile']
+        ca = paths['cafile']
+
+        user = pwd.getpwnam(self.user.name)
+        uid = user.pw_uid
+        gid = user.pw_gid
+        shared_home = f"{self.shared_home_base_dir}/{self.user.name}"
+
+        tmp_cert_path = f"/tmp/{rel_cert_path}"
+        user_cert_path = f"{shared_home}/{rel_hub_path}/{rel_cert_path}"
+
+        # Prepare the certificates in a temp directory.
+        os.makedirs(tmp_cert_path, 0o700, exist_ok=True)
+        shutil.move(key, tmp_cert_path)
+        shutil.move(cert, tmp_cert_path)
+        shutil.copy(ca, tmp_cert_path)
+        key = os.path.join(tmp_cert_path, os.path.basename(paths['keyfile']))
+        cert = os.path.join(tmp_cert_path, os.path.basename(paths['certfile']))
+        ca = os.path.join(tmp_cert_path, os.path.basename(paths['cafile']))
+        # Note that we can`t chown in the original location if there is root
+        # squashing.
+        for f in [key, cert, ca, tmp_cert_path]:
+            shutil.chown(f, user=uid, group=gid)
+
+        subprocess.Popen(['rm', '-r', user_cert_path], preexec_fn=demote(uid, gid))
+        subprocess.Popen(['mkdir', f"{shared_home}/{rel_hub_path}"], preexec_fn=demote(uid, gid))
+        # Move certs to users dir
+        subprocess.Popen(['mv', tmp_cert_path, user_cert_path], preexec_fn=demote(uid, gid))
+
+        key = os.path.join(user_cert_path, os.path.basename(paths['keyfile']))
+        cert = os.path.join(user_cert_path, os.path.basename(paths['certfile']))
+        ca = os.path.join(user_cert_path, os.path.basename(paths['cafile']))
+
+        return {"keyfile": key, "certfile": cert, "cafile": ca}
 
 
 class BatchSpawnerRegexStates(BatchSpawnerBase):
