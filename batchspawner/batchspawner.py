@@ -523,11 +523,9 @@ class BatchSpawnerBase(Spawner):
         import pwd
         import subprocess
 
-        def demote(uid, gid):
-            def set_ids():
-                os.setuid(uid)
-                os.setgid(gid)
-            return set_ids
+        def set_ids():
+            os.setuid(uid)
+            os.setgid(gid)
 
         self.log.debug("Shared home location is set to %s" % self.shared_home_base_dir)
 
@@ -547,6 +545,7 @@ class BatchSpawnerBase(Spawner):
         user_cert_path = f"{shared_home}/{rel_hub_path}/{rel_cert_path}"
 
         # Prepare the certificates in a temp directory.
+        shutil.rmtree(tmp_cert_path)
         os.makedirs(tmp_cert_path, 0o700, exist_ok=True)
         shutil.move(key, tmp_cert_path)
         shutil.move(cert, tmp_cert_path)
@@ -561,10 +560,10 @@ class BatchSpawnerBase(Spawner):
             shutil.chown(f, user=uid, group=gid)
         self.log.debug("Successfully ran chown on cert files")
 
-        subprocess.Popen(['rm', '-r', user_cert_path], preexec_fn=demote(uid, gid))
-        subprocess.Popen(['mkdir', f"{shared_home}/{rel_hub_path}"], preexec_fn=demote(uid, gid))
+        subprocess.Popen(['rm', '-r', user_cert_path], preexec_fn=set_ids)
+        subprocess.Popen(['mkdir', f"{shared_home}/{rel_hub_path}"], preexec_fn=set_ids)
         # Move certs to users dir
-        subprocess.Popen(['mv', tmp_cert_path, user_cert_path], preexec_fn=demote(uid, gid))
+        subprocess.Popen(['mv', tmp_cert_path, user_cert_path], preexec_fn=set_ids)
         self.log.debug("Moved SSL data to user`s home directory")
 
         key = os.path.join(user_cert_path, os.path.basename(paths['keyfile']))
