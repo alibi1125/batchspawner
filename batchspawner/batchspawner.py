@@ -200,6 +200,12 @@ class BatchSpawnerBase(Spawner):
         help="Command to run to submit batch scripts. Formatted using req_xyz traits as {xyz}.",
     ).tag(config=True)
 
+    shared_home_base_dir = Unicode(
+        "/home",
+        help="Set to the base of the shared home directory.  This can be different from the normal "
+        "home directory as exposed by getpwnam, e.g. for local users vs. LDAP users.",
+    ).tag(config=True)
+
     def parse_job_id(self, output):
         "Parse output of submit command to get job id."
         return output
@@ -500,7 +506,7 @@ class BatchSpawnerBase(Spawner):
             else:
                 yield {"message": "Unknown status..."}
             await asyncio.sleep(1)
-    
+
     async def move_certs(self, paths):
         """Takes cert paths, moves and sets ownership for them
 
@@ -522,7 +528,7 @@ class BatchSpawnerBase(Spawner):
                 os.setuid(uid)
                 os.setgid(gid)
             return set_ids
-        
+
         self.log.debug("Shared home location is set to %s" % self.shared_home_base_dir)
 
         rel_hub_path = '.jupyterhub'
