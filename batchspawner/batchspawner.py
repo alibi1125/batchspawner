@@ -556,12 +556,10 @@ class BatchSpawnerBase(Spawner):
             shutil.chown(f, user=uid, group=gid)
         self.log.debug("Successfully ran chown on cert files")
 
-        # First, remove old certs
-        subprocess.Popen(['rm', '-rf', user_cert_path], user=uid, group=gid)
         # Create .jupyterhub directory
         subprocess.Popen(['mkdir', '-p', f"{shared_home}/{rel_hub_path}"], user=uid, group=gid)
         # Move certs to users dir
-        subprocess.Popen(['mv', tmp_cert_path, user_cert_path], user=uid, group=gid)
+        subprocess.Popen(['mv', '-f', tmp_cert_path, user_cert_path], user=uid, group=gid)
         self.log.debug("Moved SSL data to user`s home directory")
 
         key = os.path.join(user_cert_path, os.path.basename(paths['keyfile']))
