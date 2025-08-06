@@ -552,14 +552,14 @@ class BatchSpawnerBase(Spawner):
         ca = os.path.join(tmp_cert_path, os.path.basename(paths['cafile']))
         # Note that we can`t chown in the original location if there is root
         # squashing.
-        for f in [key, cert, ca, tmp_cert_path]:
+        for f in [key, cert, ca]:
             shutil.chown(f, user=uid, group=gid)
         self.log.debug("Successfully ran chown on cert files")
 
         # Create .jupyterhub directory
-        subprocess.Popen(['mkdir', '-p', f"{shared_home}/{rel_hub_path}"], user=uid, group=gid)
+        subprocess.Popen(['mkdir', '-p', user_cert_path], user=uid, group=gid)
         # Move certs to users dir
-        subprocess.Popen(['mv', '-f', tmp_cert_path, user_cert_path], user=uid, group=gid)
+        subprocess.Popen(['mv', '-f', f"{tmp_cert_path}/*", user_cert_path], user=uid, group=gid)
         self.log.debug("Moved SSL data to user`s home directory")
 
         key = os.path.join(user_cert_path, os.path.basename(paths['keyfile']))
