@@ -185,6 +185,17 @@ class BatchSpawnerBase(Spawner):
     # Will get the raw output of the job status command unless overridden
     job_status = Unicode()
 
+    batch_submit_cmd = Unicode(
+        "",
+        help="Command to run to submit batch scripts. Formatted using req_xyz traits as {xyz}.",
+    ).tag(config=True)
+
+    req_home_base_dir = Unicode(
+        "/home",
+        help="Set to the base of the shared home directory.  This can be different from the normal "
+        "home directory as exposed by getpwnam, e.g. for local users vs. LDAP users.",
+    ).tag(config=True)
+
     # Prepare substitution variables for templates using req_xyz traits
     def get_req_subvars(self):
         reqlist = [t for t in self.trait_names() if t.startswith("req_")]
@@ -194,17 +205,6 @@ class BatchSpawnerBase(Spawner):
         if subvars.get("keepvars_extra"):
             subvars["keepvars"] += "," + subvars["keepvars_extra"]
         return subvars
-
-    batch_submit_cmd = Unicode(
-        "",
-        help="Command to run to submit batch scripts. Formatted using req_xyz traits as {xyz}.",
-    ).tag(config=True)
-
-    shared_home_base_dir = Unicode(
-        "/home",
-        help="Set to the base of the shared home directory.  This can be different from the normal "
-        "home directory as exposed by getpwnam, e.g. for local users vs. LDAP users.",
-    ).tag(config=True)
 
     def parse_job_id(self, output):
         "Parse output of submit command to get job id."
@@ -523,7 +523,7 @@ class BatchSpawnerBase(Spawner):
         import pwd
         import subprocess
 
-        self.log.debug(f"Shared home location is {self.shared_home_base_dir}")
+        self.log.debug(f"Shared home location is {self.req_home_base_dir}")
 
         rel_hub_path = '.jupyterhub'
         rel_cert_path = 'jupyterhub_certs'
@@ -538,7 +538,7 @@ class BatchSpawnerBase(Spawner):
         gid = user.pw_gid
 
         tmp_cert_path = os.path.join("/tmp", rel_cert_path)
-        user_cert_path = os.path.join(self.shared_home_base_dir, self.user.name, rel_hub_path, rel_cert_path)
+        user_cert_path = os.path.join(self.req_home_base_dir, self.user.name, rel_hub_path, rel_cert_path)
         self.log.debug(f"Temp cert directory is {tmp_cert_path}")
         self.log.debug(f"User cert directory is {user_cert_path}")
 
