@@ -532,16 +532,15 @@ class BatchSpawnerBase(Spawner):
         cert = paths['certfile']
         ca = paths['cafile']
 
+        # Get some facts about the requesting user
         user = pwd.getpwnam(self.user.name)
         uid = user.pw_uid
         gid = user.pw_gid
-        shared_home = os.path.join(self.shared_home_base_dir, self.user.name)
 
         tmp_cert_path = os.path.join("/tmp", rel_cert_path)
-        user_cert_path = os.path.join(shared_home, rel_hub_path, rel_cert_path)
-
-        self.log.debug(f"Temp cert location is {tmp_cert_path}")
-        self.log.debug(f"Temp cert location is {user_cert_path}")
+        user_cert_path = os.path.join(self.shared_home_base_dir, self.user.name, rel_hub_path, rel_cert_path)
+        self.log.debug(f"Temp cert directory is {tmp_cert_path}")
+        self.log.debug(f"User cert directory is {user_cert_path}")
 
         # Prepare the certificates in a temp directory.
         shutil.rmtree(tmp_cert_path, ignore_errors=True)
@@ -549,7 +548,6 @@ class BatchSpawnerBase(Spawner):
         shutil.move(key, tmp_cert_path)
         shutil.move(cert, tmp_cert_path)
         shutil.copy(ca, tmp_cert_path)
-
         self.log.debug(f"Moved SSL data to {tmp_cert_path}")
 
         key = os.path.join(tmp_cert_path, os.path.basename(key))
@@ -559,19 +557,20 @@ class BatchSpawnerBase(Spawner):
         # squashing.
         for f in [tmp_cert_path, key, cert, ca]:
             shutil.chown(f, user=uid, group=gid)
-
         self.log.debug("Successfully ran chown on cert files")
 
-        # Create .jupyterhub directory
+        # Create user certs directory
         subprocess.Popen(['mkdir', '-p', user_cert_path], user=uid, group=gid)
-        # Move certs to users dir
+        # Move certs to user dir
         for f in [key, cert, ca]:
             subprocess.Popen(['mv', '-f', f, user_cert_path], user=uid, group=gid)
-        self.log.debug(f"Moved SSL data to {user_cert_path}")
 
         key = os.path.join(user_cert_path, os.path.basename(key))
-        cert = os.path.join(user_cert_path, os.path.basename(key))
-        ca = os.path.join(user_cert_path, os.path.basename(key))
+        cert = os.path.join(user_cert_path, os.path.basename(cert))
+        ca = os.path.join(user_cert_path, os.path.basename(ca))
+        self.log.debug(f"Final key file location is {key}")
+        self.log.debug(f"Final cert file location is {cert}")
+        self.log.debug(f"Final ca file location is {ca}")
 
         return {"keyfile": key, "certfile": cert, "cafile": ca}
 
