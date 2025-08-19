@@ -20,12 +20,14 @@ import os
 import pwd
 import re
 import shutil
+import subprocess
+import pwd
 import xml.etree.ElementTree as ET
 from enum import Enum
 
 from jinja2 import Template
-from jupyterhub.spawner import Spawner, set_user_setuid
-from traitlets import Dict, Float, Integer, Unicode, default
+from jupyterhub.spawner import Spawner, set_user_setuid # type: ignore
+from traitlets import Dict, Float, Integer, Unicode, default # type: ignore
 
 
 def format_template(template, *args, **kwargs):
@@ -194,6 +196,12 @@ class BatchSpawnerBase(Spawner):
         "/home",
         help="Set to the base of the shared home directory.  This can be different from the normal "
         "home directory as exposed by getpwnam, e.g. for local users vs. LDAP users.",
+    ).tag(config=True)
+
+    req_user_subdir_path = Unicode(
+        ".jupyterhub",
+        help="Name of the subdirectory to put in the user's working directory. All files necessary "
+        "for BatchSpawner's correct operation will be placed there.",
     ).tag(config=True)
 
     # Prepare substitution variables for templates using req_xyz traits
@@ -520,12 +528,8 @@ class BatchSpawnerBase(Spawner):
         Stage certificates into a private home directory
         and make them readable by the user.
         """
-        import pwd
-        import subprocess
-
         self.log.debug(f"Shared home location is {self.req_home_base_dir}")
 
-        rel_hub_path = '.jupyterhub'
         rel_cert_path = 'jupyterhub_certs'
 
         key = paths['keyfile']
@@ -538,7 +542,7 @@ class BatchSpawnerBase(Spawner):
         gid = user.pw_gid
 
         tmp_cert_path = os.path.join("/tmp", rel_cert_path)
-        user_cert_path = os.path.join(self.req_home_base_dir, self.user.name, rel_hub_path, rel_cert_path)
+        user_cert_path = os.path.join(self.req_home_base_dir, self.user.name, self.req_user_subdir_path, rel_cert_path)
         self.log.debug(f"Temp cert directory is {tmp_cert_path}")
         self.log.debug(f"User cert directory is {user_cert_path}")
 
@@ -573,6 +577,30 @@ class BatchSpawnerBase(Spawner):
         self.log.debug(f"Final ca file location is {ca}")
 
         return {"keyfile": key, "certfile": cert, "cafile": ca}
+    
+    def create_user_subdir(self):
+        """Ensures the jupyterhub subdir exists in the user's home directory.
+        The user's SSL certs and log files will be placed there, so it must be in place before `start` is called.
+        """
+        # Get some facts about the requesting user
+        user = pwd.getpwnam(self.user.name)
+        uid = user.pw_uid
+        gid = user.pw_gid
+
+        if self.req_user_subdir_path:
+            user_subdir_path = os.path.join(self.req_home_base_dir, self.user.name, self.req_user_subdir_path)
+            self.log.debug(f"User's Jupyterhub subdirectory will be at {user_subdir_path}")
+            subprocess.Popen(['mkdir', '-p', user_subdir_path], user=uid, group=gid)
+        else:
+            self.log.debug("User subdir path unset, not creating anything.")
+
+    def run_pre_spawn_hook(self):
+        """Run the pre_spawn_hook if defined, as in the base class.
+        Additionally create the jupyterhub subdirectory in the user's home location.
+        """
+        self.create_user_subdir()
+        if self.pre_spawn_hook:
+            return self.pre_spawn_hook(self)
 
 
 class BatchSpawnerRegexStates(BatchSpawnerBase):
