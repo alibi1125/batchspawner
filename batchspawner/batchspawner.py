@@ -523,7 +523,7 @@ class BatchSpawnerBase(Spawner):
         import pwd
         import subprocess
 
-        self.log.debug("Shared home location is set to %s" % self.shared_home_base_dir)
+        self.log.debug(f"Shared home location is {self.shared_home_base_dir}")
 
         rel_hub_path = '.jupyterhub'
         rel_cert_path = 'jupyterhub_certs'
@@ -535,10 +535,13 @@ class BatchSpawnerBase(Spawner):
         user = pwd.getpwnam(self.user.name)
         uid = user.pw_uid
         gid = user.pw_gid
-        shared_home = f"{self.shared_home_base_dir}/{self.user.name}"
+        shared_home = os.path.join(self.shared_home_base_dir, self.user.name)
 
-        tmp_cert_path = f"/tmp/{rel_cert_path}"
-        user_cert_path = f"{shared_home}/{rel_hub_path}/{rel_cert_path}"
+        tmp_cert_path = os.path.join("/tmp", rel_cert_path)
+        user_cert_path = os.path.join(shared_home, rel_hub_path, rel_cert_path)
+
+        self.log.debug(f"Temp cert location is {tmp_cert_path}")
+        self.log.debug(f"Temp cert location is {user_cert_path}")
 
         # Prepare the certificates in a temp directory.
         shutil.rmtree(tmp_cert_path, ignore_errors=True)
@@ -546,25 +549,29 @@ class BatchSpawnerBase(Spawner):
         shutil.move(key, tmp_cert_path)
         shutil.move(cert, tmp_cert_path)
         shutil.copy(ca, tmp_cert_path)
+
         self.log.debug(f"Moved SSL data to {tmp_cert_path}")
-        key = os.path.join(tmp_cert_path, os.path.basename(paths['keyfile']))
-        cert = os.path.join(tmp_cert_path, os.path.basename(paths['certfile']))
-        ca = os.path.join(tmp_cert_path, os.path.basename(paths['cafile']))
+
+        key = os.path.join(tmp_cert_path, os.path.basename(key))
+        cert = os.path.join(tmp_cert_path, os.path.basename(cert))
+        ca = os.path.join(tmp_cert_path, os.path.basename(ca))
         # Note that we can`t chown in the original location if there is root
         # squashing.
-        for f in [key, cert, ca]:
+        for f in [tmp_cert_path, key, cert, ca]:
             shutil.chown(f, user=uid, group=gid)
+
         self.log.debug("Successfully ran chown on cert files")
 
         # Create .jupyterhub directory
         subprocess.Popen(['mkdir', '-p', user_cert_path], user=uid, group=gid)
         # Move certs to users dir
-        subprocess.Popen(['mv', '-f', f"{tmp_cert_path}/*", user_cert_path], user=uid, group=gid)
-        self.log.debug("Moved SSL data to user`s home directory")
+        for f in [key, cert, ca]:
+            subprocess.Popen(['mv', '-f', f, user_cert_path], user=uid, group=gid)
+        self.log.debug(f"Moved SSL data to {user_cert_path}")
 
-        key = os.path.join(user_cert_path, os.path.basename(paths['keyfile']))
-        cert = os.path.join(user_cert_path, os.path.basename(paths['certfile']))
-        ca = os.path.join(user_cert_path, os.path.basename(paths['cafile']))
+        key = os.path.join(user_cert_path, os.path.basename(key))
+        cert = os.path.join(user_cert_path, os.path.basename(key))
+        ca = os.path.join(user_cert_path, os.path.basename(key))
 
         return {"keyfile": key, "certfile": cert, "cafile": ca}
 
