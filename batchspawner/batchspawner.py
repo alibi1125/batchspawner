@@ -153,7 +153,10 @@ class BatchSpawnerBase(Spawner):
 
     @default("req_homedir")
     def _req_homedir_default(self):
-        return pwd.getpwnam(self.user.name).pw_dir
+        if self.home_base_dir == "":
+            return pwd.getpwnam(self.user.name).pw_dir
+        else:
+            return self.home_base_dir + self.user.name
 
     req_keepvars = Unicode()
 
@@ -192,10 +195,11 @@ class BatchSpawnerBase(Spawner):
         help="Command to run to submit batch scripts. Formatted using req_xyz traits as {xyz}.",
     ).tag(config=True)
 
-    req_home_base_dir = Unicode(
-        "/home",
-        help="Set to the base of the shared home directory.  This can be different from the normal "
-        "home directory as exposed by getpwnam, e.g. for local users vs. LDAP users.",
+    home_base_dir = Unicode(
+        "",
+        help="Set to the base of the shared home directory. This can be different from the normal "
+        "home directory as exposed by getpwnam, e.g. for local users vs. LDAP users. If this is "
+        "nonempty, it is used to construct the homedir default (instead of getpwnam).",
     ).tag(config=True)
 
     req_user_subdir_path = Unicode(
@@ -430,7 +434,7 @@ class BatchSpawnerBase(Spawner):
         # We are called with a timeout, and if the timeout expires this function will
         # be interrupted at the next yield, and self.stop() will be called.
         # So this function should not return unless successful, and if unsuccessful
-        # should either raise and Exception or loop forever.
+        # should either raise an Exception or loop forever.
         if len(self.job_id) == 0:
             raise RuntimeError(
                 "Jupyter batch job submission failure (no jobid in output)"
@@ -528,7 +532,7 @@ class BatchSpawnerBase(Spawner):
         Stage certificates into a private home directory
         and make them readable by the user.
         """
-        self.log.debug(f"Shared home location is {self.req_home_base_dir}")
+        self.log.debug(f"Shared home location is {self.home_base_dir}")
 
         rel_cert_path = 'jupyterhub_certs'
 
@@ -542,7 +546,7 @@ class BatchSpawnerBase(Spawner):
         gid = user.pw_gid
 
         tmp_cert_path = os.path.join("/tmp", rel_cert_path)
-        user_cert_path = os.path.join(self.req_home_base_dir, self.user.name, self.req_user_subdir_path, rel_cert_path)
+        user_cert_path = os.path.join(self.req_homedir, self.req_user_subdir_path, rel_cert_path)
         self.log.debug(f"Temp cert directory is {tmp_cert_path}")
         self.log.debug(f"User cert directory is {user_cert_path}")
 
@@ -588,7 +592,7 @@ class BatchSpawnerBase(Spawner):
         gid = user.pw_gid
 
         if self.req_user_subdir_path:
-            user_subdir_path = os.path.join(self.req_home_base_dir, self.user.name, self.req_user_subdir_path)
+            user_subdir_path = os.path.join(self.req_homedir, self.req_user_subdir_path)
             self.log.debug(f"User's Jupyterhub subdirectory will be at {user_subdir_path}")
             subprocess.Popen(['mkdir', '-p', user_subdir_path], user=uid, group=gid)
         else:
