@@ -156,7 +156,7 @@ class BatchSpawnerBase(Spawner):
         if self.home_base_dir == "":
             return pwd.getpwnam(self.user.name).pw_dir
         else:
-            return self.home_base_dir + self.user.name
+            return os.path.join(self.home_base_dir, self.user.name)
 
     req_keepvars = Unicode()
 
