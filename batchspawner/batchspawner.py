@@ -28,6 +28,7 @@ from enum import Enum
 from jinja2 import Template
 from jupyterhub.spawner import Spawner, set_user_setuid # type: ignore
 from traitlets import Dict, Float, Integer, Unicode, default # type: ignore
+from tornado.web import HTTPError
 
 
 def format_template(template, *args, **kwargs):
@@ -857,6 +858,43 @@ echo "jupyterhub-singleuser ended gracefully"
             self.log.error("SlurmSpawner unable to parse job ID from text: " + output)
             raise e
         return id
+    
+    # Overload submit_batch_script to allow sbatch errors to reach the user
+    async def submit_batch_script(self):
+        subvars = self.get_req_subvars()
+        # `cmd` is submitted to the batch system
+        cmd = " ".join(
+            (
+                format_template(self.exec_prefix, **subvars),
+                format_template(self.batch_submit_cmd, **subvars),
+            )
+        )
+        # `subvars['cmd']` is what is run _inside_ the batch script,
+        # put into the template.
+        subvars["cmd"] = self.cmd_formatted_for_batch()
+        if hasattr(self, "user_options"):
+            subvars.update(self.user_options)
+        script = await self._get_batch_script(**subvars)
+        self.log.info("Spawner script options: %s", subvars)
+        self.log.info("Spawner submitting command: %s", cmd)
+        self.log.debug("Spawner submitting script:\n%s", script)
+        self.log.debug("Spawner submitting environment: %s", self.get_env())
+        try:
+            out = await self.run_command(cmd, input=script, env=self.get_env())
+        except RuntimeError as e:
+            # If sbatch reports an error, we land here. To let the user know about it, we turn the
+            # runtime error into an HTTPError if we find the word `sbatch` in the error message.
+            if "sbatch:" in str(e):
+                raise HTTPError(500, f"Error submitting job: {str(e)}")
+            else:
+                raise e
+        try:
+            self.log.info("Job submitted. output: %s", out)
+            self.job_id = self.parse_job_id(out)
+        except:
+            self.log.error("Job submission failed. exit code: %s", out)
+            self.job_id = ""
+        return self.job_id
 
 
 class MultiSlurmSpawner(SlurmSpawner):
